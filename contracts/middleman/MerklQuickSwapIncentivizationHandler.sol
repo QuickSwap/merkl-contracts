@@ -52,21 +52,27 @@ contract MerklQuickSwapIncentivizationHandler is Ownable {
         return DistributionCreator(0x8BB4C975Ff3c250e0ceEA271728547f3802B36Fd);
     }
 
+    
     /*//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                   EXTERNAL FUNCTIONS                                                
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
-
-    /// @notice Specifies the reward distribution parameters for `poolAddress`
-    function setGauge(
-        address poolAddress,
-        address incentiveTokenAddress,
-        DistributionParameters memory params
+    function setGauges(
+        address [] calldata poolAddresses,
+        address [] calldata incentiveTokenAddresses,
+        DistributionParameters [] memory params
     ) external onlyByOwnerOperator {
-        if (poolAddress == address(0) || incentiveTokenAddress == address(0)) revert InvalidParams();
-        gaugeParams[poolAddress][incentiveTokenAddress] = params;
-        emit GaugeSet(poolAddress, incentiveTokenAddress);
-    }
+        if (poolAddresses.length == incentiveTokenAddresses.length) revert InvalidParams();
+        if (poolAddresses.length == params.length) revert InvalidParams();
 
+        for (uint256 i = 0; i < poolAddresses.length; i++) {
+            setGauge(
+                poolAddresses[i],
+                incentiveTokenAddresses[i],
+                params[i]
+            );
+        }
+    }
+    
     /// @notice Sets the operator of the contract
     function setOperator(address _operatorAddress) external onlyByOwnerOperator {
         operatorAddress = _operatorAddress;
@@ -75,12 +81,9 @@ contract MerklQuickSwapIncentivizationHandler is Ownable {
     /// @notice Function called by QuickSwap to stream rewards to `poolAddress`
     /// @dev Params for the incentivization of the pool must have been set prior to any call for
     /// a `(poolAddress,incentiveTokenAddress)` pair
-    function incentivizePool(
+    function incentivizePools(
         address [] calldata poolAddresses,
-        address,
-        address,
         address [] calldata incentiveTokenAddresses,
-        uint256,
         uint256 [] calldata amounts
     ) external onlyByOwnerOperator {
         if (poolAddresses.length != incentiveTokenAddresses.length) revert InvalidParams();
@@ -89,23 +92,45 @@ contract MerklQuickSwapIncentivizationHandler is Ownable {
             uint256 amount = amounts[i];
             address incentiveTokenAddress = incentiveTokenAddresses[i];
             address poolAddress = poolAddresses[i];
-
-            IERC20(incentiveTokenAddress).safeTransferFrom(msg.sender, address(this), amount);
-            DistributionParameters memory params = gaugeParams[poolAddress][incentiveTokenAddress];
-            if (params.uniV3Pool == address(0)) revert InvalidParams();
-            DistributionCreator creator = merklDistributionCreator();
-            // Minimum amount of incentive tokens to be distributed per hour
-            uint256 minAmount = creator.rewardTokenMinAmounts(incentiveTokenAddress) * params.numEpoch;
-            params.epochStart = uint32(block.timestamp);
-            params.amount = amount;
-            if (amount > 0) {
-                if (amount > minAmount) {
-                    _handleIncentiveTokenAllowance(IERC20(incentiveTokenAddress), address(creator), amount);
-                    merklDistributionCreator().createDistribution(params);
-                }
-            }
+            incentivizePool(
+                poolAddress,
+                incentiveTokenAddress,
+                amount
+            );
         }
         
+    }
+
+     /// @notice Specifies the reward distribution parameters for `poolAddress`
+    function setGauge(
+        address poolAddress,
+        address incentiveTokenAddress,
+        DistributionParameters memory params
+    ) public onlyByOwnerOperator {
+        if (poolAddress == address(0) || incentiveTokenAddress == address(0)) revert InvalidParams();
+        gaugeParams[poolAddress][incentiveTokenAddress] = params;
+        emit GaugeSet(poolAddress, incentiveTokenAddress);
+    }
+
+    function incentivizePool(
+        address poolAddress,
+        address incentiveTokenAddress,
+        uint256 amount
+    ) public onlyByOwnerOperator {
+        IERC20(incentiveTokenAddress).safeTransferFrom(msg.sender, address(this), amount);
+        DistributionParameters memory params = gaugeParams[poolAddress][incentiveTokenAddress];
+        if (params.uniV3Pool == address(0)) revert InvalidParams();
+        DistributionCreator creator = merklDistributionCreator();
+        // Minimum amount of incentive tokens to be distributed per hour
+        uint256 minAmount = creator.rewardTokenMinAmounts(incentiveTokenAddress) * params.numEpoch;
+        params.epochStart = uint32(block.timestamp);
+        params.amount = amount;
+        if (amount > 0) {
+            if (amount > minAmount) {
+                _handleIncentiveTokenAllowance(IERC20(incentiveTokenAddress), address(creator), amount);
+                merklDistributionCreator().createDistribution(params);
+            }
+        }
     }
 
     /// @notice Restores the allowance for the ANGLE token to the `DistributionCreator` contract
