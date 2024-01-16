@@ -60,7 +60,7 @@ contract MerklQuickSwapIncentivizationHandler is Ownable {
         address [] calldata poolAddresses,
         address [] calldata incentiveTokenAddresses,
         DistributionParameters [] memory params
-    ) external onlyByOwnerOperator {
+    ) external {
         if (poolAddresses.length == incentiveTokenAddresses.length) revert InvalidParams();
         if (poolAddresses.length == params.length) revert InvalidParams();
 
@@ -72,7 +72,7 @@ contract MerklQuickSwapIncentivizationHandler is Ownable {
             );
         }
     }
-    
+
     /// @notice Sets the operator of the contract
     function setOperator(address _operatorAddress) external onlyByOwnerOperator {
         operatorAddress = _operatorAddress;
@@ -85,7 +85,7 @@ contract MerklQuickSwapIncentivizationHandler is Ownable {
         address [] calldata poolAddresses,
         address [] calldata incentiveTokenAddresses,
         uint256 [] calldata amounts
-    ) external onlyByOwnerOperator {
+    ) external {
         if (poolAddresses.length != incentiveTokenAddresses.length) revert InvalidParams();
         if (amounts.length != incentiveTokenAddresses.length) revert InvalidParams();
         for (uint256 i = 0; i < amounts.length; i++) {
